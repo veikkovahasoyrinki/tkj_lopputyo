@@ -191,8 +191,6 @@ Void sensorTaskFxn(UArg arg0, UArg arg1) {
 
             float valoisuusarvo;
             char merkkijono_valoisuus[30];
-            float liike;
-            char merkkijono_liike[30];
 
 
 
