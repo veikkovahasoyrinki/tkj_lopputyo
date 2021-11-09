@@ -22,27 +22,59 @@
 #include "wireless/comm_lib.h"
 #include "sensors/opt3001.h"
 
+/* PIN */
+#include <ti/drivers/PIN.h>
+#include <ti/drivers/pin/PINCC26XX.h>
+
+
 /* Task */
 #define STACKSIZE 2048
 Char sensorTaskStack[STACKSIZE];
 Char uartTaskStack[STACKSIZE];
 
-// JTKJ: Tehtï¿½vï¿½ 3. Tilakoneen esittely
-// JTKJ: Exercise 3. Definition of the state machine
-enum state { WAITING=1, DATA_READY };
-enum state programState = WAITING;
+//Ohjelma aloittaa tilassa IDLE, napista painamalla siirrytään tilaan COLLECT
+enum state { IDLE=1, COLLECT, DATA_READY };
+enum state programState = IDLE;
 
 // JTKJ: Tehtï¿½vï¿½ 3. Valoisuuden globaali muuttuja
 // JTKJ: Exercise 3. Global variable for ambient light
 double ambientLight = -1000.0;
 
-// JTKJ: Tehtï¿½vï¿½ 1. Lisï¿½ï¿½ painonappien RTOS-muuttujat ja alustus
-// JTKJ: Exercise 1. Add pins RTOS-variables and configuration here
+
+// RTOS:n globaalit muuttujat pinnien käyttöön
+static PIN_Handle buttonHandle;
+static PIN_State buttonState;
+static PIN_Handle ledHandle;
+static PIN_State ledState;
+
+// Pinnien alustukset, molemmille pinneille oma konfiguraatio
+// Vakio BOARD_BUTTON_0 vastaa toista painonappia
+PIN_Config buttonConfig[] = { //Button-asetustaulukko
+   Board_BUTTON0  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE, 
+   PIN_TERMINATE 
+};
+
+PIN_Config ledConfig[] = { //Pin-asetustaulukko
+   Board_LED0 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX, 
+   PIN_TERMINATE 
+};
+
+
 
 void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
-
-    // JTKJ: Tehtï¿½vï¿½ 1. Vilkuta jompaa kumpaa lediï¿½
-    // JTKJ: Exercise 1. Blink either led of the device
+	//Napin käsittelijäfunktio
+	uint_t pinValue = PIN_getOutputValue( Board_LED0 );
+	pinValue = !pinValue;
+	PIN_setOutputValue( ledHandle, Board_LED0, pinValue );
+	if (programState == IDLE) {
+		programState = COLLECT;
+    	System_printf("programState is COLLECT\n");
+    	System_flush();
+	} else {
+		programState = IDLE;
+	    System_printf("programState is IDLE\n");
+    	System_flush();
+	}
 }
 
 /* Task Functions */
@@ -118,11 +150,22 @@ Int main(void) {
     // JTKJ: Exercise 2. Initialize i2c bus
     // JTKJ: Tehtï¿½vï¿½ 4. Ota UART kï¿½yttï¿½ï¿½n ohjelmassa
     // JTKJ: Exercise 4. Initialize UART
+	
+	
+   buttonHandle = PIN_open(&buttonState, buttonConfig);
+   if(!buttonHandle) {
+      System_abort("Error initializing button pins\n");
+   }
+   ledHandle = PIN_open(&ledState, ledConfig);
+   if(!ledHandle) {
+      System_abort("Error initializing LED pins\n");
+   }
 
-    // JTKJ: Tehtï¿½vï¿½ 1. Ota painonappi ja ledi ohjelman kï¿½yttï¿½ï¿½n
-    //       Muista rekisterï¿½idï¿½ keskeytyksen kï¿½sittelijï¿½ painonapille
-    // JTKJ: Exercise 1. Open the button and led pins
-    //       Remember to register the above interrupt handler for button
+   // Asetetaan painonappi-pinnille keskeytyksen käsittelijäksi
+   // funktio buttonFxn
+   if (PIN_registerIntCb(buttonHandle, &buttonFxn) != 0) {
+      System_abort("Error registering button callback function");
+   }
 
     /* Task */
     Task_Params_init(&sensorTaskParams);
