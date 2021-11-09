@@ -1,3 +1,4 @@
+//lol
 /* C Standard library */
 #include <stdio.h>
 #include <time.h>
