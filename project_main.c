@@ -27,6 +27,23 @@
 #include <ti/drivers/pin/PINCC26XX.h>
 
 
+/*Power PIN config for gyro*/
+
+static PIN_Handle hMpuPin;
+static PIN_State  MpuPinState;
+
+static PIN_Config MpuPinConfig[] = {
+    Board_MPU_POWER  | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    PIN_TERMINATE
+};
+
+static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
+    .pinSDA = Board_I2C0_SDA1,
+    .pinSCL = Board_I2C0_SCL1
+};
+
+
+
 /* Task */
 #define STACKSIZE 2048
 Char sensorTaskStack[STACKSIZE];
@@ -94,8 +111,8 @@ Void uartTaskFxn(UArg arg0, UArg arg1) {
         // JTKJ: Exercise 4. Send the same sensor data string with UART
 
         // Just for sanity check for exercise, you can comment this out
-        System_printf("uartTask\n");
-        System_flush();
+        //System_printf("uartTask\n");
+        //System_flush();
 
         // Once per second, you can modify this
         Task_sleep(1000000 / Clock_tickPeriod);
@@ -104,42 +121,103 @@ Void uartTaskFxn(UArg arg0, UArg arg1) {
 
 Void sensorTaskFxn(UArg arg0, UArg arg1) {
 
+    //GYRO
 
-//    uint8_t i;
-//    float temperature;
 
-    I2C_Handle      i2c;
-    I2C_Params      i2cParams;
+    float ax, ay, az, gx, gy, gz;
 
-    I2C_Params_init(&i2cParams);
-    i2cParams.bitRate = I2C_400kHz;
+    I2C_Handle i2cMPU; // Own i2c-interface for MPU9250 sensor
+    I2C_Params i2cMPUParams;
+
+    I2C_Params_init(&i2cMPUParams);
+    i2cMPUParams.bitRate = I2C_400kHz;
+    //i2cMPUParams.custom = (uintptr_t)&i2cMPUCfg;
+
+    // MPU power on
+    PIN_setOutputValue(hMpuPin,Board_MPU_POWER, Board_MPU_POWER_ON);
+
+    // Wait 100ms for the MPU sensor to power up
+    Task_sleep(100000 / Clock_tickPeriod);
+    System_printf("MPU9250: Power ON\n");
+    System_flush();
+
+    // MPU open i2c
+    i2cMPU = I2C_open(Board_I2C, &i2cMPUParams);
+    if (i2cMPU == NULL) {
+        System_abort("Error Initializing I2CMPU\n");
+    }
+    // MPU setup and calibration
+    System_printf("MPU9250: Setup and calibration...\n");
+    System_flush();
+
+    mpu9250_setup(&i2cMPU);
+
+    System_printf("MPU9250: Setup and calibration OK\n");
+    System_flush();
+
+    I2C_close(i2cMPU); //Opened and closed i2c for gyro
+
+    //LUX
+
+
+    I2C_Handle      i2cLUX;
+    I2C_Params      i2cParamsLUX;
+
+    I2C_Params_init(&i2cParamsLUX);
+    i2cParamsLUX.bitRate = I2C_400kHz;
 
     // Avataan yhteys
-    i2c = I2C_open(Board_I2C_TMP, &i2cParams);
-    if (i2c == NULL) {
+    i2cLUX = I2C_open(Board_I2C, &i2cParamsLUX);
+    if (i2cLUX == NULL) {
        System_abort("Error Initializing I2C\n");
     }
 
+    System_printf("OPT3001: Setup and calibration...\n");
+    System_flush();
+
     Task_sleep(100000 / Clock_tickPeriod);
-    opt3001_setup(&i2c);
+    opt3001_setup(&i2cLUX);
+
+    System_printf("OPT3001: Setup and calibration OK\n");
+    System_flush();
+
+    I2C_close(i2cLUX); //Opened and closed i2c for LUX
+
+    System_printf("LUX and GYRO setup OK\n");
+    System_flush();
 
     while (1) {
         if (programState != SLEEP) {
 
-            float arvo;
+            float valoisuusarvo;
+            char merkkijono_valoisuus[30];
+            float liike;
+            char merkkijono_liike[30];
 
-            char merkkijono[30];
-            arvo = opt3001_get_data(&i2c);
-            sprintf(merkkijono, "%f   LUX\n", arvo);
 
-            System_printf(merkkijono);
+
+            i2cLUX = I2C_open(Board_I2C, &i2cParamsLUX);    //Ask LUX for values
+            valoisuusarvo = opt3001_get_data(&i2c);
+            I2C_close(i2cLUX);
+
+            i2cMPU = I2C_open(Board_I2C, &i2cMPUParams);
+            mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);  //Ask GYRO for values
+            I2C_close(i2cMPU);
+
+
+
+            sprintf(merkkijono_valoisuus, "%f   LUX\n", valoisuusarvo);
+            sprintf(merkkijono_liike, "%f   GYRO\n", liike);
+
+
+            System_printf(merkkijono_valoisuus);
+            System_flush();
+            System_printf(merkkijono_liike);
             System_flush();
 
-            ambientLight = arvo;
+            ambientLight = valoisuusarvo;
 
-
-
-            Task_sleep(1000000 / Clock_tickPeriod);
+            Task_sleep(100000 / Clock_tickPeriod); //100ms
         }
     }
 }
@@ -156,6 +234,11 @@ Int main(void) {
     Board_initGeneral();
     Init6LoWPAN();
     
+    hMpuPin = PIN_open(&MpuPinState, MpuPinConfig);
+    if (hMpuPin == NULL) {
+        System_abort("Pin open failed!");
+    }
+
     // JTKJ: Teht�v� 2. Ota i2c-v�yl� k�ytt��n ohjelmassa
     // JTKJ: Exercise 2. Initialize i2c bus
     // JTKJ: Teht�v� 4. Ota UART k�ytt��n ohjelmassa
