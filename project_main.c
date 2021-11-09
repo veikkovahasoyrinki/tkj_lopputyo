@@ -1,4 +1,3 @@
-//lol
 /* C Standard library */
 #include <stdio.h>
 #include <time.h>
@@ -192,11 +191,13 @@ Void sensorTaskFxn(UArg arg0, UArg arg1) {
 
             float valoisuusarvo;
             char merkkijono_valoisuus[30];
+            float liike;
+            char merkkijono_liike[30];
 
 
 
             i2cLUX = I2C_open(Board_I2C, &i2cParamsLUX);    //Ask LUX for values
-            valoisuusarvo = opt3001_get_data(&i2c);
+            valoisuusarvo = opt3001_get_data(&i2cLUX);
             I2C_close(i2cLUX);
 
             i2cMPU = I2C_open(Board_I2C, &i2cMPUParams);
@@ -287,4 +288,3 @@ Int main(void) {
 
     return (0);
 }
-
