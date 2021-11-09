@@ -32,16 +32,16 @@
 Char sensorTaskStack[STACKSIZE];
 Char uartTaskStack[STACKSIZE];
 
-//Ohjelma aloittaa tilassa IDLE, napista painamalla siirrytään tilaan COLLECT
-enum state { IDLE=1, COLLECT, DATA_READY };
-enum state programState = IDLE;
+//Ohjelma aloittaa tilassa IDLE, napista painamalla siirrytï¿½ï¿½n tilaan COLLECT
+enum state { SLEEP=1, COLLECT, DATA_READY};
+enum state programState = SLEEP;
 
 // JTKJ: Tehtï¿½vï¿½ 3. Valoisuuden globaali muuttuja
 // JTKJ: Exercise 3. Global variable for ambient light
 double ambientLight = -1000.0;
 
 
-// RTOS:n globaalit muuttujat pinnien käyttöön
+// RTOS:n globaalit muuttujat pinnien kï¿½yttï¿½ï¿½n
 static PIN_Handle buttonHandle;
 static PIN_State buttonState;
 static PIN_Handle ledHandle;
@@ -62,17 +62,17 @@ PIN_Config ledConfig[] = { //Pin-asetustaulukko
 
 
 void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
-	//Napin käsittelijäfunktio
+	//Napin kï¿½sittelijï¿½funktio
 	uint_t pinValue = PIN_getOutputValue( Board_LED0 );
 	pinValue = !pinValue;
 	PIN_setOutputValue( ledHandle, Board_LED0, pinValue );
-	if (programState == IDLE) {
+	if (programState == SLEEP) {
 		programState = COLLECT;
     	System_printf("programState is COLLECT\n");
     	System_flush();
 	} else {
-		programState = IDLE;
-	    System_printf("programState is IDLE\n");
+		programState = SLEEP;
+	    System_printf("programState is SLEEP\n");
     	System_flush();
 	}
 }
@@ -104,33 +104,43 @@ Void uartTaskFxn(UArg arg0, UArg arg1) {
 
 Void sensorTaskFxn(UArg arg0, UArg arg1) {
 
+
+//    uint8_t i;
+//    float temperature;
+
     I2C_Handle      i2c;
     I2C_Params      i2cParams;
 
-    // JTKJ: Tehtï¿½vï¿½ 2. Avaa i2c-vï¿½ylï¿½ taskin kï¿½yttï¿½ï¿½n
-    // JTKJ: Exercise 2. Open the i2c bus
+    I2C_Params_init(&i2cParams);
+    i2cParams.bitRate = I2C_400kHz;
 
-    // JTKJ: Tehtï¿½vï¿½ 2. Alusta sensorin OPT3001 setup-funktiolla
-    //       Laita enne funktiokutsua eteen 100ms viive (Task_sleep)
-    // JTKJ: Exercise 2. Setup the OPT3001 sensor for use
-    //       Before calling the setup function, insertt 100ms delay with Task_sleep
+    // Avataan yhteys
+    i2c = I2C_open(Board_I2C_TMP, &i2cParams);
+    if (i2c == NULL) {
+       System_abort("Error Initializing I2C\n");
+    }
+
+    Task_sleep(100000 / Clock_tickPeriod);
+    opt3001_setup(&i2c);
 
     while (1) {
+        if (programState != SLEEP) {
 
-        // JTKJ: Tehtï¿½vï¿½ 2. Lue sensorilta dataa ja tulosta se Debug-ikkunaan merkkijonona
-        // JTKJ: Exercise 2. Read sensor data and print it to the Debug window as string
+            float arvo;
 
-        // JTKJ: Tehtï¿½vï¿½ 3. Tallenna mittausarvo globaaliin muuttujaan
-        //       Muista tilamuutos
-        // JTKJ: Exercise 3. Save the sensor value into the global variable
-        //       Remember to modify state
+            char merkkijono[30];
+            arvo = opt3001_get_data(&i2c);
+            sprintf(merkkijono, "%f   LUX\n", arvo);
 
-        // Just for sanity check for exercise, you can comment this out
-        System_printf("sensorTask\n");
-        System_flush();
+            System_printf(merkkijono);
+            System_flush();
 
-        // Once per second, you can modify this
-        Task_sleep(1000000 / Clock_tickPeriod);
+            ambientLight = arvo;
+
+
+
+            Task_sleep(1000000 / Clock_tickPeriod);
+        }
     }
 }
 
@@ -161,7 +171,7 @@ Int main(void) {
       System_abort("Error initializing LED pins\n");
    }
 
-   // Asetetaan painonappi-pinnille keskeytyksen käsittelijäksi
+   // Asetetaan painonappi-pinnille keskeytyksen kï¿½sittelijï¿½ksi
    // funktio buttonFxn
    if (PIN_registerIntCb(buttonHandle, &buttonFxn) != 0) {
       System_abort("Error registering button callback function");
@@ -195,3 +205,4 @@ Int main(void) {
 
     return (0);
 }
+
