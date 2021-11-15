@@ -16,11 +16,13 @@
 #include <ti/drivers/Power.h>
 #include <ti/drivers/power/PowerCC26XX.h>
 #include <ti/drivers/UART.h>
+#include <ti/drivers/i2c/I2CCC26XX.h>
 
 /* Board Header files */
 #include "Board.h"
 #include "wireless/comm_lib.h"
 #include "sensors/opt3001.h"
+#include "sensors/mpu9250.h"
 
 /* PIN */
 #include <ti/drivers/PIN.h>
