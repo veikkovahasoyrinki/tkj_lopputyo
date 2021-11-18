@@ -28,15 +28,16 @@
 /* Board Header files */
 #include "Board.h"
 
-int laskuri_gx, laskuri_akt = 0;
+int laskuri_gx = 0;
+int laskuri_akt = 0;
 int flag2 = 0;
 
-void pet_check(float *az, int *laskuri_az, int *flag1) {
+void syo_check(float *az, int *laskuri_az, int *flag1) {
     if (abs(*az + 1) >= 3) {
         *flag1 = 1;
     }
     if (*flag1 == 1) {
-        if (*laskuri_az <= 5) {
+        if (*laskuri_az <= 20) {
             *laskuri_az = *laskuri_az + 1;
         }
         else {
@@ -46,30 +47,44 @@ void pet_check(float *az, int *laskuri_az, int *flag1) {
     }
 }
 
-/* Tarkistaa täyttyykö leikkimisen ja liikkumisen kynnysehdot */
+/* Tarkistaa tï¿½yttyykï¿½ leikkimisen ja liikkumisen kynnysehdot */
 
-void data_check(float *ax, float *ay, float *az, float *gx, float *gy, float *gz) {
+int leiki_check(float *gx) {
     if (abs(*gx) >= 40) {
         laskuri_gx++;
-
-        if (laskuri_gx == 15) {
+        if (laskuri_gx > 10) {
             laskuri_gx = 0;
             System_printf("Leiki\n");
             System_flush();
+            return 3;
         }
     } else {
         laskuri_gx = 0;
     }
+    return 0;
+
+
+}
+
+int liiku_check(float *ax, float *ay) {
+
     if ((abs(*ax) >= 3) || (abs(*ay) >= 3)) {
         System_printf("Liiku\n");
         System_flush();
+        return 3;
+    } else {
+        return 0;
     }
+
 }
-char cha[30];
+
+//77char cha[30];
 
 int data_activate(float *valoisuusarvo, float *ax, float *ay) {
     if ((abs(*ax) >= 3) || (abs(*ay) >= 3)) {
         flag2 = 1;
+        System_printf("Give me light....");
+        System_flush();
     }
     if (flag2 == 1) {
         laskuri_akt++;
@@ -78,16 +93,18 @@ int data_activate(float *valoisuusarvo, float *ax, float *ay) {
             laskuri_akt = 0;
         }
 
-        sprintf(cha, "%f   LUX\n", *valoisuusarvo);
-        System_printf(cha);
-        System_flush();
+        //sprintf(cha, "%f   LUX\n", *valoisuusarvo);
+        //System_printf(cha);
+        //System_flush();
 
         if ((laskuri_akt <= 30) && (*valoisuusarvo >= 2000.0)){
             System_printf("AKTIVOI\n");
             System_flush();
-            laskuri_akt, flag2 = 0;
+            laskuri_akt = 0;
+            flag2 = 0;
             return 1;
         }
+    } else {
+        return 0;
     }
-    return 0;
 }
