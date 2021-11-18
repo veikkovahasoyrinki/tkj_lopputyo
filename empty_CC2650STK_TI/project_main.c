@@ -1,6 +1,7 @@
 /* C Standard library */
 #include <stdio.h>
 #include <time.h>
+#include <string.h>
 
 /* XDCtools files */
 #include <xdc/std.h>
@@ -24,6 +25,8 @@
 #include "sensors/opt3001.h"
 #include "sensors/mpu9250.h"
 
+#include "buzzer.h"
+
 /* PIN */
 #include <ti/drivers/PIN.h>
 #include <ti/drivers/pin/PINCC26XX.h>
@@ -45,6 +48,7 @@ char merkkijono_valoisuus[30];
 char merkkijono_liike[30];
 
 int sekunti = 1;
+
 /*Power PIN config for gyro*/
 
 static PIN_Handle hMpuPin;
@@ -55,10 +59,54 @@ static PIN_Config MpuPinConfig[] = {
     PIN_TERMINATE
 };
 
+/*config for BUZZER*/
+
+static PIN_State buzzerState;
+static PIN_Handle buzzerHandle;
+
+void buzz(int freq);
+
 static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
     .pinSDA = Board_I2C0_SDA1,
     .pinSCL = Board_I2C0_SCL1
 };
+
+uint8_t uartBuffer[80];
+
+char address[3] = "44";
+char bufComp[3];
+static void uartFxn(UART_Handle uart, void *rxBuf, size_t len) {
+
+
+    int i;
+    for (i = 0; i < 2; i++) {
+        bufComp[i] = uartBuffer[i];
+    }
+    bufComp[2] = 0;
+
+    if (!(strcmp(bufComp, address))) {
+        System_printf("viesti\n");
+        System_flush();
+        buzz(4000);
+    }
+
+    UART_read(uart, rxBuf, 80);
+}
+
+/* piippausfunktio */
+
+void buzz(int freq) {
+    time_t t1 = time(NULL);
+    buzzerOpen(buzzerHandle);
+    buzzerSetFrequency(freq);
+    while (1) {
+        time_t t2 = time(NULL);
+        if (t1 - t2 > 1) {
+            break;
+        }
+    }
+    buzzerClose();
+}
 
 /* Task */
 #define STACKSIZE 2048
@@ -80,10 +128,10 @@ static PIN_State button1State;
 static PIN_Handle ledHandle;
 static PIN_State ledState;
 
-// Pinnien alustukset, molemmille pinneille oma konfiguraatio
+// Pinnien alustukset, pinneille omat konfiguraatiot
 
 PIN_Config buttonConfig[] = { //Button-asetustaulukko
-   Board_BUTTON0  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE, 
+   Board_BUTTON0  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
    PIN_TERMINATE 
 };
 
@@ -92,9 +140,14 @@ PIN_Config button1Config[] = {
    PIN_TERMINATE
 };
 
-PIN_Config ledConfig[] = { //Pin-asetustaulukko
+PIN_Config ledConfig[] = { //LED-asetustaulukko
    Board_LED0 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX, 
    PIN_TERMINATE 
+};
+
+PIN_Config buzzerConfig[] = { //BUZZER-asetustaulukko
+    Board_BUZZER | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    PIN_TERMINATE
 };
 
 
@@ -108,7 +161,8 @@ void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
 		programState = COLLECT;
     	System_printf("programState is COLLECT\n");
     	System_flush();
-	} else {
+	}
+	else {
 		programState = SLEEP;
 	    System_printf("programState is SLEEP\n");
     	System_flush();
@@ -149,22 +203,23 @@ void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
 /* Task Functions */
 Void uartTaskFxn(UArg arg0, UArg arg1) {
 
-    char input;
-    char liiku_viesti[22] = "id:44,EXCERCISE:3\n\r";
-    char leiki_viesti[15] = "id:44,PET:2\n\r";
-    char syo_viesti[15] = "id:44,EAT:2\n\r";
-    char act_viesti[25] = "id:44,ACTIVATE:4;4;4\n\r";
+
+    char liiku_viesti[22] = "id:44,EXERCISE:3\0";
+    char leiki_viesti[15] = "id:44,PET:2\0";
+    char syo_viesti[15] = "id:44,EAT:2\0";
+    char act_viesti[25] = "id:44,ACTIVATE:4;4;4\0";
 
     UART_Handle uart;
     UART_Params uartParams;
 
-    // JTKJ: Teht�v� 4. Lis�� UARTin alustus: 9600,8n1
-    // JTKJ: Exercise 4. Setup here UART connection as 9600,8n1
+    //UARTin alustus: 9600,8n1
+
     UART_Params_init(&uartParams);
     uartParams.writeDataMode = UART_DATA_TEXT;
     uartParams.readDataMode = UART_DATA_TEXT;
     uartParams.readEcho = UART_ECHO_OFF;
-    uartParams.readMode=UART_MODE_BLOCKING;
+    uartParams.readMode=UART_MODE_CALLBACK;
+    uartParams.readCallback  = &uartFxn;
     uartParams.baudRate = 9600; // nopeus 9600baud
     uartParams.dataLength = UART_LEN_8; // 8
     uartParams.parityType = UART_PAR_NONE; // n
@@ -178,35 +233,35 @@ Void uartTaskFxn(UArg arg0, UArg arg1) {
         System_printf("UART OK\n");
         System_flush();
     }
+    UART_read(uart, uartBuffer, 80);
 
     while (1) {
+
 
 
         if (programState == DATA_READY) {
 
 
             if (liiku_data != 0) {
-                UART_write(uart,liiku_viesti, strlen(liiku_viesti));
+                UART_write(uart,liiku_viesti, strlen(liiku_viesti)+1);
+                liiku_data = 0;
             }
 
 
             if (leiki_data != 0) {
-                UART_write(uart,leiki_viesti, strlen(leiki_viesti));
+                UART_write(uart,leiki_viesti, strlen(leiki_viesti)+1);
+                leiki_data = 0;
             }
 
             if (syo_data != 0) {
-                UART_write(uart,syo_viesti, strlen(syo_viesti));
+                UART_write(uart,syo_viesti, strlen(syo_viesti)+1);
+                syo_data = 0;
             }
 
             if (activate_data != 0) {
-                UART_write(uart,act_viesti, strlen(act_viesti));
+                UART_write(uart,act_viesti, strlen(act_viesti)+1);
+                activate_data = 0;
             }
-
-            syo_data = 0;
-            leiki_data = 0;
-            liiku_data = 0;
-            activate_data = 0;
-
 
             //printf(teksti, "%f\n\r", ambientLight);
             //UART_write(uart,teksti, strlen(teksti));
@@ -366,6 +421,11 @@ Int main(void) {
    ledHandle = PIN_open(&ledState, ledConfig);
    if(!ledHandle) {
       System_abort("Error initializing LED pins\n");
+   }
+
+   buzzerHandle = PIN_open(&buzzerState, buzzerConfig);
+   if (!buzzerHandle) {
+       System_abort("Error initializing BUZZER pins\n");
    }
 
    // Asetetaan painonappi-pinnille keskeytyksen k�sittelij�ksi
