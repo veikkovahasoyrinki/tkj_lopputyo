@@ -35,6 +35,11 @@
 int laskuri_az = 0;
 int flag1 = 0;
 
+int leiki_data = 0;
+int liiku_data = 0;
+int syo_data = 0;
+int activate_data = 0;
+
 float valoisuusarvo;
 char merkkijono_valoisuus[30];
 char merkkijono_liike[30];
@@ -64,7 +69,7 @@ Char uartTaskStack[STACKSIZE];
 enum state { SLEEP=1, COLLECT, DATA_READY, ACTIVATE};
 enum state programState = SLEEP;
 
-double ambientLight = -1000.0;
+double ambientLight = 123123;
 
 
 // RTOS:n globaalit muuttujat pinnien kï¿½yttï¿½ï¿½n
@@ -113,11 +118,16 @@ void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
 void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
     //Napin kï¿½sittelijï¿½funktio
     if (programState == COLLECT) {
-        if ((0 < laskuri_az) && (laskuri_az <= 5)) {
-            System_printf("SYÖ\n");
+        if ((0 < laskuri_az) && (laskuri_az <= 20)) {
+            programState = DATA_READY;
+            System_printf("programState is DATA_READY\n");
             System_flush();
+            System_printf("SYï¿½\n");
+            System_flush();
+            syo_data = 1;
             laskuri_az = 0;
             flag1 = 0;
+
         }
         else {
             programState = ACTIVATE;
@@ -139,25 +149,74 @@ void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
 /* Task Functions */
 Void uartTaskFxn(UArg arg0, UArg arg1) {
 
+    char input;
+    char liiku_viesti[22] = "id:44,EXCERCISE:3\n\r";
+    char leiki_viesti[15] = "id:44,PET:2\n\r";
+    char syo_viesti[15] = "id:44,EAT:2\n\r";
+    char act_viesti[25] = "id:44,ACTIVATE:4;4;4\n\r";
+
+    UART_Handle uart;
+    UART_Params uartParams;
+
     // JTKJ: Tehtï¿½vï¿½ 4. Lisï¿½ï¿½ UARTin alustus: 9600,8n1
     // JTKJ: Exercise 4. Setup here UART connection as 9600,8n1
+    UART_Params_init(&uartParams);
+    uartParams.writeDataMode = UART_DATA_TEXT;
+    uartParams.readDataMode = UART_DATA_TEXT;
+    uartParams.readEcho = UART_ECHO_OFF;
+    uartParams.readMode=UART_MODE_BLOCKING;
+    uartParams.baudRate = 9600; // nopeus 9600baud
+    uartParams.dataLength = UART_LEN_8; // 8
+    uartParams.parityType = UART_PAR_NONE; // n
+    uartParams.stopBits = UART_STOP_ONE; // 1
+
+    uart = UART_open(Board_UART0, &uartParams);
+    if (uart == NULL) {
+       System_abort("Error opening the UART");
+    }
+    else {
+        System_printf("UART OK\n");
+        System_flush();
+    }
 
     while (1) {
 
-        // JTKJ: Tehtï¿½vï¿½ 3. Kun tila on oikea, tulosta sensoridata merkkijonossa debug-ikkunaan
-        //       Muista tilamuutos
-        // JTKJ: Exercise 3. Print out sensor data as string to debug window if the state is correct
-        //       Remember to modify state
 
-        // JTKJ: Tehtï¿½vï¿½ 4. Lï¿½hetï¿½ sama merkkijono UARTilla
-        // JTKJ: Exercise 4. Send the same sensor data string with UART
+        if (programState == DATA_READY) {
 
-        // Just for sanity check for exercise, you can comment this out
-        //System_printf("uartTask\n");
-        //System_flush();
+
+            if (liiku_data != 0) {
+                UART_write(uart,liiku_viesti, strlen(liiku_viesti));
+            }
+
+
+            if (leiki_data != 0) {
+                UART_write(uart,leiki_viesti, strlen(leiki_viesti));
+            }
+
+            if (syo_data != 0) {
+                UART_write(uart,syo_viesti, strlen(syo_viesti));
+            }
+
+            if (activate_data != 0) {
+                UART_write(uart,act_viesti, strlen(act_viesti));
+            }
+
+            syo_data = 0;
+            leiki_data = 0;
+            liiku_data = 0;
+            activate_data = 0;
+
+
+            //printf(teksti, "%f\n\r", ambientLight);
+            //UART_write(uart,teksti, strlen(teksti));
+            programState = COLLECT;
+            System_printf("ProgramState is COLLECT\n");
+            System_flush();
+        }
 
         // Once per second, you can modify this
-        Task_sleep(1000000 / Clock_tickPeriod);
+        Task_sleep(100000 / Clock_tickPeriod);
     }
 }
 
@@ -229,7 +288,7 @@ Void sensorTaskFxn(UArg arg0, UArg arg1) {
 
 
     while (1) {
-        if (programState != SLEEP) {
+        if (programState == COLLECT || programState == ACTIVATE) {
 
 
             if ( sekunti % 10 == 0) {
@@ -244,15 +303,22 @@ Void sensorTaskFxn(UArg arg0, UArg arg1) {
             I2C_close(i2cMPU);
 
             if (programState != ACTIVATE) {
-            data_check(&ax, &ay, &az, &gx, &gy, &gz);
-            pet_check(&az, &laskuri_az, &flag1);
+                leiki_data = leiki_check(&gx);
+                liiku_data = liiku_check(&ax, &ay);
+                syo_check(&az, &laskuri_az, &flag1);
+                if (leiki_data != 0 || liiku_data != 0) {
+                    programState = DATA_READY;
+                    System_printf("programState is DATA_READY\n");
+                    System_flush();
+                }
             }
 
             else if (programState == ACTIVATE) {
 
                 if (data_activate(&valoisuusarvo, &ax, &ay) == 1) {
-                    programState = COLLECT;
-                    System_printf("programState is COLLECT\n");
+                    activate_data = 1;
+                    programState = DATA_READY;
+                    System_printf("programState is DATA_READY\n");
                     System_flush();
                 }
             }
@@ -278,7 +344,8 @@ Int main(void) {
 
     // Initialize board
     Board_initGeneral();
-    Init6LoWPAN();
+    // Init6LoWPAN();
+    Board_initUART();
     
     hMpuPin = PIN_open(&MpuPinState, MpuPinConfig);
     if (hMpuPin == NULL) {
