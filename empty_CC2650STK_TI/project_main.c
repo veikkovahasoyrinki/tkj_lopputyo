@@ -1,13 +1,14 @@
-/* C Standard library */
-#include <stdio.h>
+/*A sensortag program for tamagotchi. The program collects and sends data with UART to gateway program, 
+which then sends the data forward to a backend server through internet.
+
+Authors: Eemil Kulmala, Veikko Vähäsöyrinki */
+
+
+//Header files
 #include <time.h>
 #include <string.h>
-
-/* XDCtools files */
 #include <xdc/std.h>
 #include <xdc/runtime/System.h>
-
-/* BIOS Header files */
 #include <ti/sysbios/BIOS.h>
 #include <ti/sysbios/knl/Clock.h>
 #include <ti/sysbios/knl/Task.h>
@@ -18,52 +19,36 @@
 #include <ti/drivers/power/PowerCC26XX.h>
 #include <ti/drivers/UART.h>
 #include <ti/drivers/i2c/I2CCC26XX.h>
-
-/* Board Header files */
 #include "Board.h"
 #include "wireless/comm_lib.h"
 #include "sensors/opt3001.h"
 #include "sensors/mpu9250.h"
 #include "buzzer.h"
-
-/* PIN */
 #include <ti/drivers/PIN.h>
 #include <ti/drivers/pin/PINCC26XX.h>
-
 #include <own_functions.h>
 
 
-
-
-//Globaalit muuttujat
+//Global variables
 int laskuri_az = 0;
 int flag1 = 0;
-
 int leiki_data = 0;
 int liiku_data = 0;
 int syo_data = 0;
-int activate_data = 0;
-
+int activate_data = 0; 
 float valoisuusarvo;
 char merkkijono_valoisuus[30];
 char merkkijono_liike[30];
-
 int sekunti = 1;
 double ambientLight = 123123;
-
 uint8_t uartBuffer[80];
-
 char address[3] = "44";
 char bufComp[3];
 
 
-
-
 //PINS
-
 static PIN_Handle hMpuPin;
 static PIN_State  MpuPinState;
-
 static PIN_State buzzerState;
 static PIN_Handle buzzerHandle;
 static PIN_Handle buttonHandle;
@@ -80,14 +65,13 @@ Char sensorTaskStack[STACKSIZE];
 Char uartTaskStack[STACKSIZE];
 
 
-//TILAKONE
+//State machine
 //Ohjelma aloittaa tilassa IDLE, napista painamalla siirryt��n tilaan COLLECT
 enum state { SLEEP=1, COLLECT, DATA_READY, ACTIVATE};
 enum state programState = SLEEP;
 
 
-// Pinnien alustukset, pinneille omat konfiguraatiot
-
+// Configuration arrays for PINS
 PIN_Config buttonConfig[] = { //Button-asetustaulukko
    Board_BUTTON0  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
    PIN_TERMINATE 
@@ -113,8 +97,8 @@ static PIN_Config MpuPinConfig[] = {
     PIN_TERMINATE
 };
 
-//Omat funktiot
 
+//Functions
 static void uartFxn(UART_Handle uart, void *rxBuf, size_t len) {
     int k;
     for (k = 0; k < 2; k++) {
@@ -131,9 +115,7 @@ static void uartFxn(UART_Handle uart, void *rxBuf, size_t len) {
     UART_read(uart, rxBuf, 80);
 }
 
-/* piippausfunktio */
-
-void buzz(int freq) {
+Void buzz(int freq) {
     time_t t1 = time(NULL);
     buzzerOpen(buzzerHandle);
     buzzerSetFrequency(freq);
@@ -145,8 +127,6 @@ void buzz(int freq) {
     }
     buzzerClose();
 }
-
-
 
 void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
 	//Napin k�sittelij�funktio
@@ -165,7 +145,7 @@ void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
 	}
 }
 
-void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
+Void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
     //Napin k�sittelij�funktio
     if (programState == COLLECT) {
         if ((0 < laskuri_az) && (laskuri_az <= 20)) {
@@ -197,7 +177,7 @@ void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
 }
 
 /* Task Functions */
-Void uartTaskFxn(UArg arg0, UArg arg1) {
+void uartTaskFxn(UArg arg0, UArg arg1) {
 
 
     char liiku_viesti[22] = "id:44,EXERCISE:3\0";
@@ -232,17 +212,12 @@ Void uartTaskFxn(UArg arg0, UArg arg1) {
     UART_read(uart, uartBuffer, 80);
 
     while (1) {
-
-
-
         if (programState == DATA_READY) {
-
 
             if (liiku_data != 0) {
                 UART_write(uart,liiku_viesti, strlen(liiku_viesti)+1);
                 liiku_data = 0;
             }
-
 
             if (leiki_data != 0) {
                 UART_write(uart,leiki_viesti, strlen(leiki_viesti)+1);
@@ -271,11 +246,9 @@ Void uartTaskFxn(UArg arg0, UArg arg1) {
     }
 }
 
-Void sensorTaskFxn(UArg arg0, UArg arg1) {
+void sensorTaskFxn(UArg arg0, UArg arg1) {
 
     //GYRO
-
-
     float ax, ay, az, gx, gy, gz;
 
     I2C_Handle i2cMPU; // Own i2c-interface for MPU9250 sensor
@@ -310,8 +283,6 @@ Void sensorTaskFxn(UArg arg0, UArg arg1) {
     I2C_close(i2cMPU); //Opened and closed i2c for gyro
 
     //LUX
-
-
     I2C_Handle      i2cLUX;
     I2C_Params      i2cParamsLUX;
 
@@ -385,7 +356,8 @@ Void sensorTaskFxn(UArg arg0, UArg arg1) {
     }
 }
 
-Int main(void) {
+//MAIN
+int main(void) {
 
     // Task variables
     Task_Handle sensorTaskHandle;
