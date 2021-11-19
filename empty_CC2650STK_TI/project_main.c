@@ -24,17 +24,18 @@
 #include "wireless/comm_lib.h"
 #include "sensors/opt3001.h"
 #include "sensors/mpu9250.h"
-
 #include "buzzer.h"
 
 /* PIN */
 #include <ti/drivers/PIN.h>
 #include <ti/drivers/pin/PINCC26XX.h>
 
-/*Omat functiot*/
 #include <own_functions.h>
 
-//data_check funktion muuttujia
+
+
+
+//Globaalit muuttujat
 int laskuri_az = 0;
 int flag1 = 0;
 
@@ -48,85 +49,42 @@ char merkkijono_valoisuus[30];
 char merkkijono_liike[30];
 
 int sekunti = 1;
-
-/*Power PIN config for gyro*/
-
-static PIN_Handle hMpuPin;
-static PIN_State  MpuPinState;
-
-static PIN_Config MpuPinConfig[] = {
-    Board_MPU_POWER  | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
-    PIN_TERMINATE
-};
-
-/*config for BUZZER*/
-
-static PIN_State buzzerState;
-static PIN_Handle buzzerHandle;
-
-void buzz(int freq);
-
-static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
-    .pinSDA = Board_I2C0_SDA1,
-    .pinSCL = Board_I2C0_SCL1
-};
+double ambientLight = 123123;
 
 uint8_t uartBuffer[80];
 
 char address[3] = "44";
 char bufComp[3];
-static void uartFxn(UART_Handle uart, void *rxBuf, size_t len) {
 
 
-    int i;
-    for (i = 0; i < 2; i++) {
-        bufComp[i] = uartBuffer[i];
-    }
-    bufComp[2] = 0;
-
-    if (!(strcmp(bufComp, address))) {
-        System_printf("viesti\n");
-        System_flush();
-        buzz(4000);
-    }
-
-    UART_read(uart, rxBuf, 80);
-}
-
-/* piippausfunktio */
-
-void buzz(int freq) {
-    time_t t1 = time(NULL);
-    buzzerOpen(buzzerHandle);
-    buzzerSetFrequency(freq);
-    while (1) {
-        time_t t2 = time(NULL);
-        if (t1 - t2 > 1) {
-            break;
-        }
-    }
-    buzzerClose();
-}
-
-/* Task */
-#define STACKSIZE 2048
-Char sensorTaskStack[STACKSIZE];
-Char uartTaskStack[STACKSIZE];
-
-//Ohjelma aloittaa tilassa IDLE, napista painamalla siirryt��n tilaan COLLECT
-enum state { SLEEP=1, COLLECT, DATA_READY, ACTIVATE};
-enum state programState = SLEEP;
-
-double ambientLight = 123123;
 
 
-// RTOS:n globaalit muuttujat pinnien k�ytt��n
+//PINS
+
+static PIN_Handle hMpuPin;
+static PIN_State  MpuPinState;
+
+static PIN_State buzzerState;
+static PIN_Handle buzzerHandle;
 static PIN_Handle buttonHandle;
 static PIN_State buttonState;
 static PIN_Handle button1Handle;
 static PIN_State button1State;
 static PIN_Handle ledHandle;
 static PIN_State ledState;
+
+
+/* Task */
+#define STACKSIZE 2048
+Char sensorTaskStack[STACKSIZE];
+Char uartTaskStack[STACKSIZE];
+
+
+//TILAKONE
+//Ohjelma aloittaa tilassa IDLE, napista painamalla siirryt��n tilaan COLLECT
+enum state { SLEEP=1, COLLECT, DATA_READY, ACTIVATE};
+enum state programState = SLEEP;
+
 
 // Pinnien alustukset, pinneille omat konfiguraatiot
 
@@ -149,6 +107,44 @@ PIN_Config buzzerConfig[] = { //BUZZER-asetustaulukko
     Board_BUZZER | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     PIN_TERMINATE
 };
+
+static PIN_Config MpuPinConfig[] = {
+    Board_MPU_POWER  | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    PIN_TERMINATE
+};
+
+//Omat funktiot
+
+static void uartFxn(UART_Handle uart, void *rxBuf, size_t len) {
+    int k;
+    for (k = 0; k < 2; k++) {
+        bufComp[k] = uartBuffer[k];
+    }
+    bufComp[2] = 0;
+
+    if ((strcmp(bufComp, address)) == 0) {
+        System_printf("viesti\n");
+        System_flush();
+        buzz(4000);
+    }
+
+    UART_read(uart, rxBuf, 80);
+}
+
+/* piippausfunktio */
+
+void buzz(int freq) {
+    time_t t1 = time(NULL);
+    buzzerOpen(buzzerHandle);
+    buzzerSetFrequency(freq);
+    while (1) {
+        time_t t2 = time(NULL);
+        if (t1 - t2 > 1) {
+            break;
+        }
+    }
+    buzzerClose();
+}
 
 
 
