@@ -67,7 +67,7 @@ Char uartTaskStack[STACKSIZE];
 
 //State machine
 //Ohjelma aloittaa tilassa IDLE, napista painamalla siirryt��n tilaan COLLECT
-enum state { SLEEP=1, COLLECT, DATA_READY, ACTIVATE};
+enum state { SLEEP=1, COLLECT, DATA_READY, ACTIVATE, WAIT};
 enum state programState = SLEEP;
 
 
@@ -129,19 +129,21 @@ Void buzz(int freq) {
 }
 
 void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
-	//Napin k�sittelij�funktio
-	uint_t pinValue = PIN_getOutputValue( Board_LED0 );
-	pinValue = !pinValue;
-	PIN_setOutputValue( ledHandle, Board_LED0, pinValue );
-	if (programState == SLEEP) {
-		programState = COLLECT;
-    	System_printf("programState is COLLECT\n");
-    	System_flush();
-	}
-	else {
-		programState = SLEEP;
-	    System_printf("programState is SLEEP\n");
-    	System_flush();
+	if (programState != WAIT) {
+		programState = WAIT;
+		uint_t pinValue = PIN_getOutputValue( Board_LED0 );
+		pinValue = !pinValue;
+		PIN_setOutputValue( ledHandle, Board_LED0, pinValue );
+		if (programState == SLEEP) {
+			programState = COLLECT;
+		System_printf("programState is COLLECT\n");
+		System_flush();
+		}
+		else {
+			programState = SLEEP;
+		    System_printf("programState is SLEEP\n");
+		System_flush();
+		}
 	}
 }
 
