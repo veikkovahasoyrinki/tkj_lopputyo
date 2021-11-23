@@ -41,6 +41,11 @@ char merkkijono_liike[30];
 int sekunti = 1;
 double ambientLight = 123123;
 
+char liiku_viesti[] = "id:44,EXERCISE:3\0";
+char leiki_viesti[] = "id:44,PET:2\0";
+char syo_viesti[] = "id:44,EAT:2\0";
+char act_viesti[] = "id:44,ACTIVATE:4;4;4\0";
+
 
 
 //PINS
@@ -104,11 +109,12 @@ Void buzz(int freq) {
     buzzerOpen(buzzerHandle);
     buzzerSetFrequency(freq);
     while (1) {
-        time_t t2 = time(NULL);
-        if (t1 - t2 > 1) {
-            break;
-        }
+            time_t t2 = time(NULL);
+            if (t1 - t2 > 1) {
+                break;
+            }
     }
+
     buzzerClose();
 }
 /*
@@ -188,7 +194,6 @@ Void commTask(UArg arg0, UArg arg1) {
    char payload[80]; // viestipuskuri
    uint16_t senderAddr;
 
-   //Task_sleep(100000 / Clock_tickPeriod);
 
    // Radio alustetaan vastaanottotilaan
    int32_t result = StartReceive6LoWPAN();
@@ -412,6 +417,38 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
             ///System_flush();
 
         }
+
+    if (programState == DATA_READY) {
+
+        if (liiku_data != 0) {
+            Send6LoWPAN(IEEE80154_SERVER_ADDR,liiku_viesti, strlen(liiku_viesti));
+            buzz(1000);
+            liiku_data = 0;
+        }
+
+        if (leiki_data != 0) {
+            Send6LoWPAN(IEEE80154_SERVER_ADDR,leiki_viesti, strlen(leiki_viesti));
+            buzz(1000);
+            leiki_data = 0;
+        }
+
+       if (syo_data != 0) {
+           Send6LoWPAN(IEEE80154_SERVER_ADDR,syo_viesti, strlen(syo_viesti));
+           buzz(1000);
+           syo_data = 0;
+       }
+
+       if (activate_data != 0) {
+           Send6LoWPAN(IEEE80154_SERVER_ADDR,act_viesti, strlen(act_viesti));
+           buzz(2000);
+           buzz(1000);
+           activate_data = 0;
+       }
+       StartReceive6LoWPAN();
+       programState = COLLECT;
+       System_printf("programState is COLLECT\n");
+       System_flush();
+    }
     sekunti++;
     Task_sleep(100000 / Clock_tickPeriod); //100ms
     }
@@ -456,7 +493,7 @@ int main(void) {
        System_abort("Error initializing BUZZER pins\n");
    }
 
-   /*
+
    // Asetetaan painonappi-pinnille keskeytyksen k�sittelij�ksi
    // funktio buttonFxn
    if (PIN_registerIntCb(buttonHandle, &buttonFxn) != 0) {
@@ -466,10 +503,10 @@ int main(void) {
    if (PIN_registerIntCb(button1Handle, &button1Fxn) != 0) {
         System_abort("Error registering button callback function");
    }
-    */
+
 
     /* Task */
-   /*
+
    Task_Params_init(&sensorTaskParams);
     sensorTaskParams.stackSize = STACKSIZE;
     sensorTaskParams.stack = &sensorTaskStack;
@@ -479,7 +516,7 @@ int main(void) {
         System_abort("Task create failed!");
 
     }
-    */
+
 
 
     Task_Params_init(&commTaskParams);
@@ -512,3 +549,4 @@ int main(void) {
 
     return (0);
 }
+
