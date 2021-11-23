@@ -17,7 +17,6 @@ Authors: Eemil Kulmala, Veikko Vähäsöyrinki */
 #include <ti/drivers/I2C.h>
 #include <ti/drivers/Power.h>
 #include <ti/drivers/power/PowerCC26XX.h>
-#include <ti/drivers/UART.h>
 #include <ti/drivers/i2c/I2CCC26XX.h>
 #include "Board.h"
 #include "wireless/comm_lib.h"
@@ -27,7 +26,7 @@ Authors: Eemil Kulmala, Veikko Vähäsöyrinki */
 #include <ti/drivers/PIN.h>
 #include <ti/drivers/pin/PINCC26XX.h>
 #include <own_functions.h>
-
+#include <wireless/comm_lib.h>
 
 //Global variables
 int laskuri_az = 0;
@@ -41,9 +40,7 @@ char merkkijono_valoisuus[30];
 char merkkijono_liike[30];
 int sekunti = 1;
 double ambientLight = 123123;
-uint8_t uartBuffer[80];
-char address[3] = "44";
-char bufComp[3];
+
 
 
 //PINS
@@ -62,8 +59,8 @@ static PIN_State ledState;
 /* Task */
 #define STACKSIZE 2048
 Char sensorTaskStack[STACKSIZE];
-Char uartTaskStack[STACKSIZE];
-
+//Char uartTaskStack[STACKSIZE];
+Char commTaskStack[STACKSIZE];
 
 //State machine
 //Ohjelma aloittaa tilassa IDLE, napista painamalla siirryt��n tilaan COLLECT
@@ -99,21 +96,8 @@ static PIN_Config MpuPinConfig[] = {
 
 
 //Functions
-static void uartFxn(UART_Handle uart, void *rxBuf, size_t len) {
-    int k;
-    for (k = 0; k < 2; k++) {
-        bufComp[k] = uartBuffer[k];
-    }
-    bufComp[2] = 0;
+void buzz(int freq);
 
-    if ((strcmp(bufComp, address)) == 0) {
-        System_printf("viesti\n");
-        System_flush();
-        buzz(4000);
-    }
-
-    UART_read(uart, rxBuf, 80);
-}
 
 Void buzz(int freq) {
     time_t t1 = time(NULL);
@@ -127,10 +111,32 @@ Void buzz(int freq) {
     }
     buzzerClose();
 }
+/*
+static void uartFxn(UART_Handle uart, char *uartBuffer, size_t len) {
+    char *result;
+    const char address[] = "44,BEEP";
+
+    // System_printf(uartBuffer);
+    // System_flush();
+
+    result = strstr(uartBuffer, address);
+    if (result != NULL) {
+        System_printf("viesti\n");
+        System_flush();
+        // buzz(4000);
+    }
+
+    UART_read(uart, uartBuffer, 80);
+}
+*/
+
+
+static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
+    .pinSDA = Board_I2C0_SDA1,
+    .pinSCL = Board_I2C0_SCL1
+};
 
 void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
-	if (programState != WAIT) {
-		programState = WAIT;
 		uint_t pinValue = PIN_getOutputValue( Board_LED0 );
 		pinValue = !pinValue;
 		PIN_setOutputValue( ledHandle, Board_LED0, pinValue );
@@ -144,7 +150,6 @@ void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
 		    System_printf("programState is SLEEP\n");
 		System_flush();
 		}
-	}
 }
 
 Void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
@@ -178,7 +183,61 @@ Void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
     }
 }
 
+Void commTask(UArg arg0, UArg arg1) {
+
+   char payload[80]; // viestipuskuri
+   uint16_t senderAddr;
+
+   //Task_sleep(100000 / Clock_tickPeriod);
+
+   // Radio alustetaan vastaanottotilaan
+   int32_t result = StartReceive6LoWPAN();
+   if(result != true) {
+      System_abort("Wireless receive start failed");
+   }
+   char *res;
+   const char address[] = "44,BEEP";
+
+   // Vastaanotetaan viestejä loopissa
+   while (true) {
+
+        if (GetRXFlag()) {
+
+           memset(payload,0,80);
+           Receive6LoWPAN(&senderAddr, payload, 80);
+
+
+           res = strstr(payload, address);
+           if (res != NULL) {
+               System_printf("viesti\n");
+               System_flush();
+               buzz(2000);
+           }
+
+         }
+      }
+}
+
+/*Void myTaskFxn(UArg arg0, UArg arg1) {
+
+   // Taskin ikuinen elämä
+   while (1) {
+      if (programState == DATA_READY) {
+
+
+
+
+
+
+
+
+      }
+      Task_sleep(100000 / Clock_tickPeriod);
+   }
+}*/
+
 /* Task Functions */
+/*
 void uartTaskFxn(UArg arg0, UArg arg1) {
 
 
@@ -247,7 +306,7 @@ void uartTaskFxn(UArg arg0, UArg arg1) {
         Task_sleep(100000 / Clock_tickPeriod);
     }
 }
-
+*/
 void sensorTaskFxn(UArg arg0, UArg arg1) {
 
     //GYRO
@@ -352,9 +411,9 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
             ////System_printf(merkkijono_liike);
             ///System_flush();
 
-            sekunti++;
-            Task_sleep(100000 / Clock_tickPeriod); //100ms
         }
+    sekunti++;
+    Task_sleep(100000 / Clock_tickPeriod); //100ms
     }
 }
 
@@ -364,13 +423,12 @@ int main(void) {
     // Task variables
     Task_Handle sensorTaskHandle;
     Task_Params sensorTaskParams;
-    Task_Handle uartTaskHandle;
-    Task_Params uartTaskParams;
-
+    Task_Params commTaskParams;
+    Task_Handle commTaskHandle;
     // Initialize board
     Board_initGeneral();
-    // Init6LoWPAN();
-    Board_initUART();
+    Init6LoWPAN();
+    //Board_initUART();
     
     hMpuPin = PIN_open(&MpuPinState, MpuPinConfig);
     if (hMpuPin == NULL) {
@@ -398,6 +456,7 @@ int main(void) {
        System_abort("Error initializing BUZZER pins\n");
    }
 
+   /*
    // Asetetaan painonappi-pinnille keskeytyksen k�sittelij�ksi
    // funktio buttonFxn
    if (PIN_registerIntCb(buttonHandle, &buttonFxn) != 0) {
@@ -407,16 +466,32 @@ int main(void) {
    if (PIN_registerIntCb(button1Handle, &button1Fxn) != 0) {
         System_abort("Error registering button callback function");
    }
+    */
 
     /* Task */
-    Task_Params_init(&sensorTaskParams);
+   /*
+   Task_Params_init(&sensorTaskParams);
     sensorTaskParams.stackSize = STACKSIZE;
     sensorTaskParams.stack = &sensorTaskStack;
     sensorTaskParams.priority=2;
     sensorTaskHandle = Task_create(sensorTaskFxn, &sensorTaskParams, NULL);
     if (sensorTaskHandle == NULL) {
         System_abort("Task create failed!");
+
     }
+    */
+
+
+    Task_Params_init(&commTaskParams);
+
+    commTaskParams.stackSize = STACKSIZE;
+    commTaskParams.stack = &commTaskStack;
+    commTaskParams.priority = 1;
+    commTaskHandle = Task_create((Task_FuncPtr)commTask, &commTaskParams, NULL);
+    if (commTaskHandle == NULL) {
+       System_abort("Task create failed");
+    }
+/*
 
     Task_Params_init(&uartTaskParams);
     uartTaskParams.stackSize = STACKSIZE;
@@ -426,6 +501,7 @@ int main(void) {
     if (uartTaskHandle == NULL) {
         System_abort("Task create failed!");
     }
+*/
 
     /* Sanity check */
     System_printf("Hello world!\n");
