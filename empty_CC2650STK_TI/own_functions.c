@@ -32,8 +32,8 @@ int laskuri_gx = 0;
 int laskuri_akt = 0;
 int flag2 = 0;
 
-void syo_check(float *az, int *laskuri_az, int *flag1) {
-    if (abs(*az + 1) >= 3) {
+void syo_check(float *az, float *ay, float *ax, int *laskuri_az, int *flag1) {
+    if (abs(*az + 1) >= 2 && abs(*ay) < 1 && abs(*ax) < 1) {
         *flag1 = 1;
     }
     if (*flag1 == 1) {
@@ -49,8 +49,8 @@ void syo_check(float *az, int *laskuri_az, int *flag1) {
 
 /* Tarkistaa t�yttyyk� leikkimisen ja liikkumisen kynnysehdot */
 
-int leiki_check(float *gx) {
-    if (abs(*gx) >= 40) {
+int leiki_check(float *gx, float *gy, float *gz) {
+    if (abs(*gx) >= 50 && abs(*gy) < 40 && abs(*gz) < 40) {
         laskuri_gx++;
         if (laskuri_gx > 10) {
             laskuri_gx = 0;
@@ -66,19 +66,18 @@ int leiki_check(float *gx) {
 
 }
 
-int liiku_check(float *ax, float *ay) {
+int liiku_check(float *ax, float *ay, float *az) {
 
-    if ((abs(*ax) >= 3) || (abs(*ay) >= 3)) {
+    if ((abs(*ax) >= 3 || abs(*ay) >= 3) && abs(*az) < 0.5) {
         System_printf("Liiku\n");
         System_flush();
         return 3;
     } else {
         return 0;
     }
-
 }
 
-//77char cha[30];
+//char cha[30];
 
 int data_activate(float *valoisuusarvo, float *ax, float *ay) {
     if ((abs(*ax) >= 3) || (abs(*ay) >= 3)) {
@@ -93,9 +92,9 @@ int data_activate(float *valoisuusarvo, float *ax, float *ay) {
             laskuri_akt = 0;
         }
 
-        //sprintf(cha, "%f   LUX\n", *valoisuusarvo);
-        //System_printf(cha);
-        //System_flush();
+     //   sprintf(cha, "%f   LUX\n", *valoisuusarvo);
+     //   System_printf(cha);
+     //   System_flush();
 
         if ((laskuri_akt <= 30) && (*valoisuusarvo >= 2000.0)){
             System_printf("AKTIVOI\n");
