@@ -373,7 +373,8 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
 
     System_printf("LUX and GYRO setup OK\n");
     System_flush();
-
+    char valoisuus_day[] = "MSG1:Day";
+    char valoisuus_night[] = "MSG1:Night";
 
     while (1) {
         if (programState == COLLECT || programState == ACTIVATE) {
@@ -383,6 +384,14 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
                 i2cLUX = I2C_open(Board_I2C, &i2cParamsLUX);    //Ask LUX for values
                 valoisuusarvo = opt3001_get_data(&i2cLUX);
                 I2C_close(i2cLUX);
+                if (valoisuusarvo > 50) {
+
+                    Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_day, strlen(valoisuus_day));
+                    StartReceive6LoWPAN();
+                } else if (valoisuusarvo < 50) {
+                    Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_night, strlen(valoisuus_night));
+                    StartReceive6LoWPAN();
+                }
 
             }
 
@@ -391,9 +400,9 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
             I2C_close(i2cMPU);
 
             if (programState != ACTIVATE) {
-                leiki_data = leiki_check(&gx);
-                liiku_data = liiku_check(&ax, &ay);
-                syo_check(&az, &laskuri_az, &flag1);
+                leiki_data = leiki_check(&gx,&gy, &gz);
+                liiku_data = liiku_check(&ax, &ay, &az);
+                syo_check(&az, &ay, &ax, &laskuri_az, &flag1);
                 if (leiki_data != 0 || liiku_data != 0) {
                     programState = DATA_READY;
                     System_printf("programState is DATA_READY\n");
@@ -549,4 +558,3 @@ int main(void) {
 
     return (0);
 }
-
