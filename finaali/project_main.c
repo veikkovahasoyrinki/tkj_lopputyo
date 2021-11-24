@@ -112,7 +112,7 @@ void buzz(int freq);
 
 void musiikki();
 
-Void buzz(int freq) {
+Void buzz(int freq) { //Buzzer
     time_t t1 = time(NULL);
     buzzerOpen(buzzerHandle);
     buzzerSetFrequency(freq);
@@ -131,7 +131,7 @@ static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
     .pinSCL = Board_I2C0_SCL1
 };
 
-void musiikki() {
+void musiikki() { //Function to play music, originally made by: Robson Couto
     int thisNote;
     int notes;
     notes = sizeof(melody) / sizeof(melody[0]) / 2;
@@ -171,7 +171,7 @@ void musiikki() {
 }
 
 
-void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
+void buttonFxn(PIN_Handle handle, PIN_Id pinId) { //Button0 handler function
 		uint_t pinValue = PIN_getOutputValue( Board_LED0 );
 		pinValue = !pinValue;
 		PIN_setOutputValue( ledHandle, Board_LED0, pinValue );
@@ -188,7 +188,7 @@ void buttonFxn(PIN_Handle handle, PIN_Id pinId) {
 		}
 }
 
-Void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
+Void button1Fxn(PIN_Handle handle, PIN_Id pinId) { //Button1 handler function
     //Napin k�sittelij�funktio
     if (programState == COLLECT) {
         if ((0 < laskuri_az) && (laskuri_az <= 20)) {
@@ -228,7 +228,7 @@ Void button1Fxn(PIN_Handle handle, PIN_Id pinId) {
     }
 }
 
-Void commTask(UArg arg0, UArg arg1) {
+Void commTask(UArg arg0, UArg arg1) { //Wireless commtask for recieving and handling incoming messages
 
    char payload[80]; // viestipuskuri
    uint16_t senderAddr;
@@ -250,17 +250,17 @@ Void commTask(UArg arg0, UArg arg1) {
            Receive6LoWPAN(&senderAddr, payload, 80);
 
 
-           res = strstr(payload, address);
-           if (res != NULL) {
+           res = strstr(payload, address); //Check if recieved message contains our address
+           if (res != NULL) {  //variable res will contain something else than NULL if message is meant for us
                System_printf("viesti\n");
                System_flush();
-               buzz(2000);
+               buzz(2000);   //Notify the user we have recieved a message
            }
          }
       }
 }
 
-void sensorTaskFxn(UArg arg0, UArg arg1) {
+void sensorTaskFxn(UArg arg0, UArg arg1) { //Temperature, gyro and lux sensor task, also data transmitting and playing music happens here
 
     //GYRO
     float ax, ay, az, gx, gy, gz;
@@ -343,7 +343,7 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
 
     I2C_close(i2cTEMP); //Opened and closed i2c for TEMP
 
-    System_printf("LUX, TEMP and GYRO setup OK\n");
+    System_printf("Sensors OK, SensorTag ready\n");
     System_flush();
     char valoisuus_day[] = "MSG1:Day";
     char valoisuus_night[] = "MSG1:Night";
@@ -353,22 +353,22 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
 
 
     while (1) {
-        if (programState == COLLECT || programState == ACTIVATE) {
+        if (programState == COLLECT || programState == ACTIVATE) { //If state is COLLECT or ACTIVATE ask sensors for values
 
 
-            if ( sekunti % 10 == 0) {
-                i2cLUX = I2C_open(Board_I2C, &i2cParamsLUX);    //Ask LUX for values
+            if ( sekunti % 10 == 0) {  //Using modulo to find out if second has passed, can't query opt3001 sensor too much because it will throw DATA NOT READY error
+                i2cLUX = I2C_open(Board_I2C, &i2cParamsLUX);    
                 valoisuusarvo = opt3001_get_data(&i2cLUX);
                 I2C_close(i2cLUX);
-
-                i2cTEMP = I2C_open(Board_I2C, &i2cParamsTEMP);    //Ask TEMP for values
+																		//Ask opt and tmp sensor for values, save them in a variable
+                i2cTEMP = I2C_open(Board_I2C, &i2cParamsTEMP);    
                 lampotila = tmp007_get_data(&i2cTEMP);
                 I2C_close(i2cTEMP);
 
 
                 if (lampotila > 37) {
 
-                    Send6LoWPAN(IEEE80154_SERVER_ADDR,lampotila_warm, strlen(lampotila_warm));
+                    Send6LoWPAN(IEEE80154_SERVER_ADDR,lampotila_warm, strlen(lampotila_warm)); // MSG1: temperature
                     StartReceive6LoWPAN();
                 } else if (lampotila < 37) {
                     Send6LoWPAN(IEEE80154_SERVER_ADDR,lampotila_cold, strlen(lampotila_cold));
@@ -379,7 +379,7 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
 
                 if (valoisuusarvo > 50) {
 
-                    Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_day, strlen(valoisuus_day));
+                    Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_day, strlen(valoisuus_day)); //MSG2: light
                     StartReceive6LoWPAN();
                 } else if (valoisuusarvo < 50) {
                     Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_night, strlen(valoisuus_night));
@@ -389,15 +389,15 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
             }
 
             i2cMPU = I2C_open(Board_I2C, &i2cMPUParams);
-            mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);  //Ask GYRO for values
+            mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);  //Ask GYRO for values, save them to variables
             I2C_close(i2cMPU);
 
             if (programState != ACTIVATE) {
-                leiki_data = leiki_check(&gx,&gy, &gz);
-                liiku_data = liiku_check(&ax, &ay, &az);
+                leiki_data = leiki_check(&gx,&gy, &gz);          //Functions for checking if movement had happened, if treshold values have been broken,
+                liiku_data = liiku_check(&ax, &ay, &az);			//leiki_data and liiku_data will return != 0
                 syo_check(&az, &ay, &ax, &laskuri_az, &flag1);
                 if (leiki_data != 0 || liiku_data != 0) {
-                    programState = DATA_READY;
+                    programState = DATA_READY;                            //State change 
                     System_printf("programState is DATA_READY\n");
                     System_flush();
                 }
@@ -414,12 +414,11 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
             }
         }
 
-    if (programState == DATA_READY) {
-
+    if (programState == DATA_READY) { //Sending pet, move, eat, activate messages
         if (liiku_data != 0) {
             Send6LoWPAN(IEEE80154_SERVER_ADDR,liiku_viesti, strlen(liiku_viesti));
-            buzz(1000);
-            liiku_data = 0;
+            buzz(1000);   //Notify the user a message has been sent
+            liiku_data = 0; //Reset the variable
         }
 
         if (leiki_data != 0) {
@@ -440,21 +439,21 @@ void sensorTaskFxn(UArg arg0, UArg arg1) {
            buzz(1000);
            activate_data = 0;
        }
-       StartReceive6LoWPAN();
+       StartReceive6LoWPAN();  //Set the radio back to recieve
        programState = COLLECT;
        System_printf("programState is COLLECT\n");
        System_flush();
     }
-    sekunti++;
-    Task_sleep(100000 / Clock_tickPeriod); //100ms
+    sekunti++;            //10 times a sec this variable is incremented
+    Task_sleep(100000 / Clock_tickPeriod); //100ms wait before the while loop is run again
     if (programState == SLEEP){
-        while(flag_music == 1) {
+        while(flag_music == 1) { //Play music if state is sleep and music flag is set to 1
             buzzerOpen(buzzerHandle);
             musiikki();
             buzzerClose();
         }
     }
-    }
+  }
 }
 
 //MAIN
@@ -465,6 +464,7 @@ int main(void) {
     Task_Params sensorTaskParams;
     Task_Params commTaskParams;
     Task_Handle commTaskHandle;
+	
     // Initialize board
     Board_initGeneral();
     Init6LoWPAN();
@@ -496,8 +496,6 @@ int main(void) {
    }
 
 
-   // Asetetaan painonappi-pinnille keskeytyksen k�sittelij�ksi
-   // funktio buttonFxn
    if (PIN_registerIntCb(buttonHandle, &buttonFxn) != 0) {
       System_abort("Error registering button callback function");
    }
@@ -506,7 +504,7 @@ int main(void) {
         System_abort("Error registering button callback function");
    }
 
-    /* Task */
+    /* Tasks */
 
    Task_Params_init(&sensorTaskParams);
     sensorTaskParams.stackSize = STACKSIZE;
@@ -527,11 +525,10 @@ int main(void) {
        System_abort("Task create failed");
     }
 
-    /* Sanity check */
+
+	
     System_printf("Hello world!\n");
     System_flush();
-
-    /* Start BIOS */
     BIOS_start();
 
     return (0);
