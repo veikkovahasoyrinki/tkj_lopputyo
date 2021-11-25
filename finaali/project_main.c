@@ -46,13 +46,16 @@ char merkkijono_valoisuus[30];
 char merkkijono_liike[30];
 int sekunti = 1;
 int tempo = 108;
-
+uint_t pin1Value;
 
 char liiku_viesti[] = "id:44,EXERCISE:3\0";
 char leiki_viesti[] = "id:44,PET:2\0";
 char syo_viesti[] = "id:44,EAT:2\0";
 char act_viesti[] = "id:44,ACTIVATE:3;3;3\0";
-
+char valoisuus_day[] = "MSG1:Day\0";
+char valoisuus_night[] = "MSG1:Night\0";
+char lampotila_cold[] = "MSG2:Cold\0";
+char lampotila_warm[] = "MSG2:Hot\0";
 
 
 //PINS
@@ -66,7 +69,8 @@ static PIN_Handle button1Handle;
 static PIN_State button1State;
 static PIN_Handle ledHandle;
 static PIN_State ledState;
-
+static PIN_Handle led1Handle;
+static PIN_State led1State;
 
 /* Task */
 #define STACKSIZE 2048
@@ -96,6 +100,11 @@ PIN_Config ledConfig[] = { //LED-asetustaulukko
    PIN_TERMINATE 
 };
 
+PIN_Config led1Config[] = { //LED-asetustaulukko
+   Board_LED1 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+   PIN_TERMINATE
+};
+
 PIN_Config buzzerConfig[] = { //BUZZER-asetustaulukko
     Board_BUZZER | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     PIN_TERMINATE
@@ -106,13 +115,94 @@ static PIN_Config MpuPinConfig[] = {
     PIN_TERMINATE
 };
 
+static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
+    .pinSDA = Board_I2C0_SDA1,
+    .pinSCL = Board_I2C0_SCL1
+};
+
 
 //Functions
 void buzz(int freq);
-
 void musiikki();
+void msg_func();
+void data_ready();
+void play_music();
 
-Void buzz(int freq) { //Buzzer
+void play_music() { //Function to play music if state is sleep and music flag is set to 1
+    if (programState == SLEEP){
+        if (pin1Value == 1) {
+            pin1Value = !pin1Value;
+            PIN_setOutputValue( led1Handle, Board_LED1, pin1Value ); //RED led ON to indicate when programState is ACTIVATE
+        }
+        while(flag_music == 1) {
+            buzzerOpen(buzzerHandle);
+            musiikki();
+            buzzerClose();
+        }
+
+    }
+}
+void data_ready() { //Function to send pet, move, eat, activate messages
+    if (programState == DATA_READY) {
+        if (liiku_data != 0) {
+            Send6LoWPAN(IEEE80154_SERVER_ADDR,liiku_viesti, strlen(liiku_viesti));
+            buzz(1000);   //Notify the user a message has been sent
+            liiku_data = 0; //Reset the variable
+        }
+
+        if (leiki_data != 0) {
+            Send6LoWPAN(IEEE80154_SERVER_ADDR,leiki_viesti, strlen(leiki_viesti));
+            buzz(1000);
+            leiki_data = 0;
+        }
+
+       if (syo_data != 0) {
+           Send6LoWPAN(IEEE80154_SERVER_ADDR,syo_viesti, strlen(syo_viesti));
+           buzz(1000);
+           syo_data = 0;
+       }
+
+       if (activate_data != 0) {
+           Send6LoWPAN(IEEE80154_SERVER_ADDR,act_viesti, strlen(act_viesti));
+           buzz(2000);
+           buzz(1000);
+           activate_data = 0;
+       }
+       StartReceive6LoWPAN();  //Set the radio back to recieve
+       programState = COLLECT;
+       System_printf("programState is COLLECT\n");
+       System_flush();
+    }
+
+}
+void msg_func() { // Function for sending messages about temperature and light
+        if (sekunti % 100 == 0 && programState == COLLECT) { // Every 10 seconds send MSG1
+            if (lampotila > 37) {
+                Send6LoWPAN(IEEE80154_SERVER_ADDR,lampotila_warm, strlen(lampotila_warm)); // MSG1: temperature
+                StartReceive6LoWPAN();
+                System_printf("MSG1\n");
+                System_flush();
+            } else if (lampotila < 37) {
+                Send6LoWPAN(IEEE80154_SERVER_ADDR,lampotila_cold, strlen(lampotila_cold));
+                System_printf("MSG2\n");
+                System_flush();
+                StartReceive6LoWPAN();
+            }
+        }
+
+    if (sekunti % 130 == 0) { //Every 13 seconds send MSG2
+        if (valoisuusarvo > 50) {
+            Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_day, strlen(valoisuus_day)); //MSG2: light
+            StartReceive6LoWPAN();
+        } else if (valoisuusarvo < 50) {
+            Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_night, strlen(valoisuus_night));
+            StartReceive6LoWPAN();
+        }
+    }
+
+}
+
+void buzz(int freq) { //Buzzer
     time_t t1 = time(NULL);
     buzzerOpen(buzzerHandle);
     buzzerSetFrequency(freq);
@@ -125,11 +215,6 @@ Void buzz(int freq) { //Buzzer
 
     buzzerClose();
 }
-
-static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
-    .pinSDA = Board_I2C0_SDA1,
-    .pinSCL = Board_I2C0_SCL1
-};
 
 void musiikki() { //Function to play music, originally made by: Robson Couto
     int thisNote;
@@ -170,11 +255,10 @@ void musiikki() { //Function to play music, originally made by: Robson Couto
 
 }
 
-
 void buttonFxn(PIN_Handle handle, PIN_Id pinId) { //Button0 handler function
 		uint_t pinValue = PIN_getOutputValue( Board_LED0 );
 		pinValue = !pinValue;
-		PIN_setOutputValue( ledHandle, Board_LED0, pinValue );
+		PIN_setOutputValue( ledHandle, Board_LED0, pinValue ); //GREEN led ON to indicate when programState is != SLEEP
 		if (programState == SLEEP) {
 			programState = COLLECT;
 			flag_music = 0;
@@ -206,12 +290,20 @@ Void button1Fxn(PIN_Handle handle, PIN_Id pinId) { //Button1 handler function
             programState = ACTIVATE;
             System_printf("programState is AKTIVOI\n");
             System_flush();
+            pin1Value = PIN_getOutputValue( Board_LED1 );
+            //System_printf(pin1Value);
+            //System_flush();
+            pin1Value = !pin1Value;
+            PIN_setOutputValue( led1Handle, Board_LED1, pin1Value ); //RED led ON to indicate when programState is ACTIVATE
         }
     }
     else if (programState == ACTIVATE){
         System_printf("programState is COLLECT\n");
         System_flush();
         programState = COLLECT;
+        pin1Value = PIN_getOutputValue( Board_LED1 );
+        pin1Value = !pin1Value;
+        PIN_setOutputValue( led1Handle, Board_LED1, pin1Value );
     }
     else if (programState == SLEEP){
         if(flag_music == 0){
@@ -345,17 +437,10 @@ void sensorTaskFxn(UArg arg0, UArg arg1) { //Temperature, gyro and lux sensor ta
 
     System_printf("Sensors OK, SensorTag ready\n");
     System_flush();
-    char valoisuus_day[] = "MSG1:Day";
-    char valoisuus_night[] = "MSG1:Night";
-
-    char lampotila_cold[] = "MSG2:Cold";
-    char lampotila_warm[] = "MSG2:Hot";
 
 
     while (1) {
         if (programState == COLLECT || programState == ACTIVATE) { //If state is COLLECT or ACTIVATE ask sensors for values
-
-
             if ( sekunti % 10 == 0) {  //Using modulo to find out if second has passed, can't query opt3001 sensor too much because it will throw DATA NOT READY error
                 i2cLUX = I2C_open(Board_I2C, &i2cParamsLUX);    
                 valoisuusarvo = opt3001_get_data(&i2cLUX);
@@ -364,36 +449,16 @@ void sensorTaskFxn(UArg arg0, UArg arg1) { //Temperature, gyro and lux sensor ta
                 i2cTEMP = I2C_open(Board_I2C, &i2cParamsTEMP);    
                 lampotila = tmp007_get_data(&i2cTEMP);
                 I2C_close(i2cTEMP);
-
-
-                if (lampotila > 37) {
-
-                    Send6LoWPAN(IEEE80154_SERVER_ADDR,lampotila_warm, strlen(lampotila_warm)); // MSG1: temperature
-                    StartReceive6LoWPAN();
-                } else if (lampotila < 37) {
-                    Send6LoWPAN(IEEE80154_SERVER_ADDR,lampotila_cold, strlen(lampotila_cold));
-                    StartReceive6LoWPAN();
-                }
-
-
-
-                if (valoisuusarvo > 50) {
-
-                    Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_day, strlen(valoisuus_day)); //MSG2: light
-                    StartReceive6LoWPAN();
-                } else if (valoisuusarvo < 50) {
-                    Send6LoWPAN(IEEE80154_SERVER_ADDR,valoisuus_night, strlen(valoisuus_night));
-                    StartReceive6LoWPAN();
-                }
-
             }
+
+            msg_func();
 
             i2cMPU = I2C_open(Board_I2C, &i2cMPUParams);
             mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);  //Ask GYRO for values, save them to variables
             I2C_close(i2cMPU);
 
             if (programState != ACTIVATE) {
-                leiki_data = leiki_check(&gx,&gy, &gz);          //Functions for checking if movement had happened, if treshold values have been broken,
+                leiki_data = leiki_check(&gx);          //Calling functions for checking if movement had happened, if threshold values have been broken,
                 liiku_data = liiku_check(&ax, &ay, &az);			//leiki_data and liiku_data will return != 0
                 syo_check(&az, &ay, &ax, &laskuri_az, &flag1);
                 if (leiki_data != 0 || liiku_data != 0) {
@@ -414,45 +479,11 @@ void sensorTaskFxn(UArg arg0, UArg arg1) { //Temperature, gyro and lux sensor ta
             }
         }
 
-    if (programState == DATA_READY) { //Sending pet, move, eat, activate messages
-        if (liiku_data != 0) {
-            Send6LoWPAN(IEEE80154_SERVER_ADDR,liiku_viesti, strlen(liiku_viesti));
-            buzz(1000);   //Notify the user a message has been sent
-            liiku_data = 0; //Reset the variable
-        }
+    data_ready();
 
-        if (leiki_data != 0) {
-            Send6LoWPAN(IEEE80154_SERVER_ADDR,leiki_viesti, strlen(leiki_viesti));
-            buzz(1000);
-            leiki_data = 0;
-        }
-
-       if (syo_data != 0) {
-           Send6LoWPAN(IEEE80154_SERVER_ADDR,syo_viesti, strlen(syo_viesti));
-           buzz(1000);
-           syo_data = 0;
-       }
-
-       if (activate_data != 0) {
-           Send6LoWPAN(IEEE80154_SERVER_ADDR,act_viesti, strlen(act_viesti));
-           buzz(2000);
-           buzz(1000);
-           activate_data = 0;
-       }
-       StartReceive6LoWPAN();  //Set the radio back to recieve
-       programState = COLLECT;
-       System_printf("programState is COLLECT\n");
-       System_flush();
-    }
-    sekunti++;            //10 times a sec this variable is incremented
+    sekunti++;            //10 times a second this variable is incremented
     Task_sleep(100000 / Clock_tickPeriod); //100ms wait before the while loop is run again
-    if (programState == SLEEP){
-        while(flag_music == 1) { //Play music if state is sleep and music flag is set to 1
-            buzzerOpen(buzzerHandle);
-            musiikki();
-            buzzerClose();
-        }
-    }
+    play_music();
   }
 }
 
@@ -489,6 +520,12 @@ int main(void) {
    if(!ledHandle) {
       System_abort("Error initializing LED pins\n");
    }
+
+   led1Handle = PIN_open(&led1State, led1Config);
+   if(!led1Handle) {
+      System_abort("Error initializing LED pins\n");
+   }
+
 
    buzzerHandle = PIN_open(&buzzerState, buzzerConfig);
    if (!buzzerHandle) {
