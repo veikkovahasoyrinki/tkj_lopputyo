@@ -49,8 +49,8 @@ void syo_check(float *az, float *ay, float *ax, int *laskuri_az, int *flag1) {
 
 /* Tarkistaa t�yttyyk� leikkimisen ja liikkumisen kynnysehdot */
 
-int leiki_check(float *gx, float *gy, float *gz) {
-    if (abs(*gx) >= 50 && abs(*gy) < 40 && abs(*gz) < 40) {
+int leiki_check(float *gx) {
+    if (abs(*gx) >= 50) {
         laskuri_gx++;
         if (laskuri_gx > 10) {
             laskuri_gx = 0;
