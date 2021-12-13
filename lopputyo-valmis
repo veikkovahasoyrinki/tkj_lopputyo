@@ -1,0 +1,231 @@
+.pos 0
+   irmovq array,%r11     # muistipaikka 0x700
+   irmovq $144,%r12        # 3
+   rmmovq %r12,(%r11)
+   irmovq $0,%r12        # 5
+   rmmovq %r12,8(%r11)
+   irmovq $8,%r12        # 8
+   rmmovq %r12,16(%r11)
+   irmovq $0,%r12        # loppunolla
+   rmmovq %r12,24(%r11)
+# Tästä alkaa palautettava koodi
+#Ohjelma mukailee lovelacen C-algoritmia, sillä erotuksella että luvut 5*x*x+4 ja 5*x*x-4
+#Tarkistetaan samalla iteraatiolla eikä yksitellen.
+#Suoritus etenee näin: ensimmäisellä iteraatiolla vaiheet 1-6 ja sen jälkeen loopataan vaihetta 2-6
+#Ensimmäinen numero otetaan käsittelyyn mainissa, muut arrayLoop-aliohjelmassa
+#Tämä siksi koska ensimmäisellä kerralla otetaan osoite 0x700 ja loopissa osoitteeseen aina lisätään 8
+
+
+#Ohjelmassani käytän kerto- ja jakolaskua miinuslaskulla ja pluslaskulla.
+#Neliöjuuren lasken nelöjuurialiohjelmalla, jonka tein aiemmin harjoitustehtävää varten. Se ei mene tarkistimesta läpi, koska käskymäärä ylittää 10 000
+#Neliöjuurialiohjelma on pullonkaula harjoitustyössäni. Tämä epäilemättä siksi, koska siinä tehtävä 
+#bittisiirtovaihe >>2 kestää todella kauan, koska teen sen jakamalla luvulla 4. Jakolaskualgoritmi on miinuslasku.
+#Neliöjuurialgoritmi mukailee tarkasti lovelacessa esiteltyä C-algoritmia neliöjuuren laskua varten.
+
+#Ohjelmassani otetaan luku käsittelyyn arraysta, lasketaan sille parametrit 5*x*x-4 ja 5*x*x+4
+#Lasketaan parametreille neliöjuuret ja muodostetaan luvut sqrt*sqrt. Lopuksi vaiheessa 6 vertaillaan ja jos luku on fibonaccin luku, hypätään vaiheeseen 2
+
+#Ohjelmani toimii oikein fibonaccin luvuille 1 -144. Jos fibonaccin luku on 233, ohjelma ei toimi. Tämä johtuu siitä, että luvu 233*233*5+4 = 271449
+#on liian paha neliöjuurialiohjelmalleni ja se antaa tulokseksi 511 kun oikea tulos on 521. Virhe ei ole iso, mutta 511*511 on yli 10 000 heitto ja siten se
+#ei mene vaiheen 6 läpi. Virhe on outo, koska luvulle 230, 230*230*5-4 neliöjuurialgoritmini vielä laskee oikean neliöjuuren.
+#n. luvusta 233*233*5 ylöspäin neliöjuuren laskeminen heittää kymmenellä alaspäin.
+
+
+main:               #1
+    irmovq stack,%rsp      
+    irmovq stack,%rbp      
+    mrmovq (%r11), %r14   #r14 on globaali rekisteri 
+    irmovq $0, %r8          #siellä on aina käsittelyssä oleva numero
+    subq %r8, %r14      #Tarkistetaan onko luku 0
+    jne isFibonacci     #Jos !=0, ohjelman suoritus jatkuu
+    halt
+    
+arrayLoop:        #2
+    irmovq $0, %rax
+    irmovq $0, %rcx
+    irmovq $0, %rdx
+    irmovq $8, %r8  #+8 muistiosoitteeseen
+    addq %r8, %r11
+    irmovq $0, %r8
+    mrmovq (%r11), %r14 #loopissa muisista num
+    subq %r8, %r14     #r14 on rekisteri jossa
+    jne isFibonacci     #numerot ovat tallessa
+    irmovq $0, %rax
+    halt
+    
+
+
+isFibonacci:        #3
+    irmovq $1, %rdx  
+    irmovq $5, %rdi
+    rrmovq %r14, %r8 
+    subq %rdx,%rdi      #Muodostetaan luku 5*x*x kertolaskulla
+    call kertominen     #kertominen-aliohjelma käyttää paremetreinaan
+    rrmovq %r14, %rdi   #rdi, r8, rdx, ja rax rekisterejä
+    subq %rdx, %rdi     #Tätä aliohjelmaa uudelleenkäytetään ohjelmassa
+    call kertominen
+    irmovq $4, %rdi          #nyt r8 = 5*x*x
+    rrmovq %r8, %r13        
+    subq %rdi, %r8    #r8 on nyt 5*x*x-4
+    pushq %r8          
+    addq %rdi, %r13    #r13 on nyt 5*x*x+4
+    pushq %r13          #Muodostetaan molemmat parametrit ja pushataan stackiin talteen
+    jmp isPerfectSquare 
+    
+isPerfectSquare:      #4
+    rrmovq %r8, %rax   #Tässä aliohjelmassa muodostetaan neliöjuuret
+    call neliojuuri #äsken lasketuille luvuille, rekisteri rax on neliöjuuri aliojelman
+    rrmovq %rsi, %r12   #parametrirekisteri, tulos tulee rdi rekisteriin
+    rrmovq %r13, %rax   
+    call neliojuuri
+    rrmovq %rsi, %r13   #nyt r13 ja r12 rekistereissä on tallessa lasketut neliöjuuret
+    irmovq $0, %rsi
+    irmovq $1, %rdx     #Parametrit kuntoon kertolaskua varten
+    rrmovq %r13, %rdi  
+    rrmovq %r13, %r8    
+    subq %rdx, %rdi
+    call kertominen      
+    rrmovq %r8, %r13
+    rrmovq %r12, %rdi  
+    rrmovq %r12, %r8
+    subq %rdx, %rdi
+    call kertominen     #Nyt rekisteri r12 ja r13 sisältää sqrt*sqrt tulokset
+    rrmovq %r8, %r12
+    irmovq $0, %r8
+    irmovq $0, %rdi
+    irmovq $0, %rdx
+    jmp tuloscheck      #Siirrytään tarkistajaan joka on ohjelman viimeinen osa
+
+tuloscheck:        #6
+    popq %r9        #Stackista pois 5*x*x-4 ja +4 numerot
+    subq %r13, %r9  #Lasketaan sqrt*sqrt - 5*x*x-4
+    je arrayLoop    #Jos 0, tiedetään että luku on fibonaccin luk, ei tarvitse
+    popq %r10       #tarkistaa +4, siirrytään takaisin vaiheeseen 2
+    subq %r12, %r10
+    je arrayLoop   #luvun 5*x*x+4 tarkistus
+    rrmovq %r14, %rax   #Jos suoritus etenee tälle riville, tiedetään että käsittelyssä
+    halt                #oleva luku ei ole fibonaccin luku, palautetaan se rax rekisteriin ja lopetetaan suoritus
+    
+kertominen:
+    addq %r8,%rax   
+    subq %rdx, %rdi
+    jge kertominen
+    rrmovq %rax, %r8 #r8 sisältää tuloksen
+    irmovq $0, %rax
+    ret
+    
+###################### Neliojuurialiohjelma ja sen aliohjelmat #############
+
+neliojuuri:   #5            
+    irmovq $1, %rdx   #Rekisterissä rax operoitava numero
+    irmovq $2, %rdi   #Uudet parametrit rekistereihin
+    irmovq $4, %rsi     #Neliöjuuri tarvitsee paljon rekistereitä käyttöönsä
+    irmovq $65536, %rcx # bit
+    irmovq $0, %rbx
+    irmovq $0, %r8
+    irmovq $0, %r9      
+    irmovq $0, %r10
+    
+    call bitcheck #goto first while
+    addq %rax, %rcx
+    call secondwhile
+    rrmovq %r8, %rsi #save result to rsi
+    irmovq $0, %rdi
+    irmovq $0, %r9
+    irmovq $0, %r10
+    irmovq $0, %r8
+    irmovq $0, %rcx
+    irmovq $0, %rax
+    irmovq $0, %rdx
+    ret
+    
+bitcheck:
+    subq %rax, %rcx #if bit > num, then bitshift
+    jg jakolasku
+    ret             #else ret
+
+jakolasku:
+    addq %rax, %rcx
+    subq %rsi, %rcx
+    jge miinuslasku # >>2 happens here
+
+miinuslasku:
+    addq %rdx, %r10
+    subq %rsi, %rcx
+    jge miinuslasku
+    rrmovq %r10, %rcx
+    irmovq $0, %r10
+    jmp bitcheck
+
+secondwhile:
+    addq %r10, %rcx
+    jne notzero
+    ret
+    
+notzero:
+    subq %r10, %rcx
+    rrmovq %r8, %r9  #r9 = temporary value of r8
+    addq %rcx, %r9 #r9 = res + bit
+    subq %rax, %r9 # (res + bit) - num
+    jle jump  #jump if num >= (res + bit)
+    irmovq $0, %r9
+    jmp else
+    
+jump:
+    addq %rax, %r9
+    subq %r9, %rax
+    jmp llll
+
+llll:
+    irmovq $0, %r9
+    subq %rdi, %r8
+    jge second_miinuslasku # res >> 1
+    addq %rdi, %r8
+    jmp add
+
+second_miinuslasku:
+    addq %rdx, %r10
+    subq %rdi, %r8
+    jge second_miinuslasku
+    rrmovq %r10, %r8
+    irmovq $0, %r10
+    jmp add # (res >> 1) + bit
+    
+add:
+    addq %rcx, %r8
+    subq %rsi, %rcx
+    jge third_miinuslasku # bit >>2 again
+    ret
+    
+third_miinuslasku:
+    addq %rdx, %r10 
+    subq %rsi, %rcx
+    jge third_miinuslasku
+    rrmovq %r10, %rcx
+    irmovq $0, %r10
+    jmp secondwhile
+
+else:
+    subq %rdi, %r8
+    jmp plaaa # res >> 1
+    
+plaaa:
+    addq %rdx, %r10
+    subq %rdi, %r8
+    jge plaaa
+    rrmovq %r10, %r8
+    irmovq $0, %r10
+    subq %rsi, %rcx
+    jge third_miinuslasku
+    ret
+    
+###########################
+
+
+
+.pos 0x700
+array:
+
+.pos 0x1000
+stack:
+
